@@ -1,0 +1,47 @@
+{
+ "run_id": "T1_simple_r1",
+ "task_id": "T1_simple",
+ "timestamp": "2026-07-27T16:18:35",
+ "duration_seconds": 41.3,
+ "timed_out": false,
+ "exit_code": 0,
+ "stderr_tail": "",
+ "answer": "命令执行完成，最终答案原文如下：\n\nDiffusion Policy的作者是 Cheng Chi、Zhenjia Xu、Siyuan Feng、Eric Cousineau、Yilun Du、Benjamin Burchfiel、Russ Tedrake、Shuran Song。",
+ "num_turns": 4,
+ "subtype": "success",
+ "is_error": false,
+ "total_cost_usd": 0.13498939999999998,
+ "usage_raw": {
+  "input_tokens": 8,
+  "cache_creation_input_tokens": 13794,
+  "cache_read_input_tokens": 137798,
+  "output_tokens": 968,
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 11862,
+   "ephemeral_5m_input_tokens": 1932
+  },
+  "inference_geo": "not_available",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 103,
+    "cache_read_input_tokens": 38470,
+    "cache_creation_input_tokens": 376,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 376,
+     "ephemeral_1h_input_tokens": 0
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard"
+ },
+ "input_tokens": 151600,
+ "output_tokens": 968,
+ "total_tokens": 152568
+}

@@ -1,0 +1,47 @@
+{
+ "run_id": "T2_medium_r1",
+ "task_id": "T2_medium",
+ "timestamp": "2026-07-27T16:21:09",
+ "duration_seconds": 22.6,
+ "timed_out": false,
+ "exit_code": 1,
+ "stderr_tail": "",
+ "answer": "You've hit your monthly spend limit · raise it at claude.ai/settings/usage?from=cc_cli_limit_message",
+ "num_turns": 2,
+ "subtype": "success",
+ "is_error": true,
+ "total_cost_usd": 0.08043159999999999,
+ "usage_raw": {
+  "input_tokens": 2,
+  "cache_creation_input_tokens": 11552,
+  "cache_read_input_tokens": 25052,
+  "output_tokens": 191,
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 11552,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "not_available",
+  "iterations": [
+   {
+    "input_tokens": 2,
+    "output_tokens": 191,
+    "cache_read_input_tokens": 25052,
+    "cache_creation_input_tokens": 11552,
+    "cache_creation": {
+     "ephemeral_5m_input_tokens": 0,
+     "ephemeral_1h_input_tokens": 11552
+    },
+    "type": "message"
+   }
+  ],
+  "speed": "standard"
+ },
+ "input_tokens": 36606,
+ "output_tokens": 191,
+ "total_tokens": 36797
+}
