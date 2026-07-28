@@ -574,19 +574,127 @@ opencode  no         -                      -         not registered — adapter
 * **从 Windows 浏览器访问 `http://localhost:8751`：HTTP 200，1166 bytes**
   —— WSL2 的 localhost 自动转发工作正常，宿主机上可以直接开 UI
 
-### 剩余两项 FAIL 的性质
+上述为 **Claude Code 登录之前**的中间状态，两项 FAIL 都不是环境搭建问题，
+都需要账号凭据：`claude` runtime 需交互式浏览器 OAuth 登录，`codex` runtime 需另装
+OpenAI Codex CLI。
 
-两项都**不是环境搭建问题**，都需要账号凭据：
+### 登录后的最终状态
 
-1. `claude` runtime 需要交互式登录（浏览器 OAuth）—— 必须本人操作
-2. `codex` runtime 需要另外安装 OpenAI Codex CLI，且同样需要 OpenAI 账号
+完成 Claude Code 登录后重跑：
+
+```
+Soloco doctor
+CLI version: 0.2.1
+PASS  Node v24.18.0 satisfies >=22.5.0
+PASS  daemon is running at http://localhost:8751 (version 0.2.1)
+PASS  local UI is served by the daemon
+PASS  runtime ready: claude 2.1.220 (Claude Code)
+WARN  optional runtime unavailable: codex (spawn codex ENOENT)
+```
+
+```
+RUNTIME   AVAILABLE  VERSION                LOGIN  REASON
+codex     no         -                      -      spawn codex ENOENT
+claude    yes        2.1.220 (Claude Code)  ok     -
+kimi      no         -                      -      not registered — adapter not yet wired
+qwen      no         -                      -      not registered — adapter not yet wired
+opencode  no         -                      -      not registered — adapter not yet wired
+```
+
+**环境搭建目标达成：4 PASS + 1 项可选 WARN。**
+
+### 观察：`doctor` 对 codex 的严重级别是条件性的
+
+同一台机器、codex 状态从未改变（始终未安装），但 `doctor` 的判定变了：
+
+| claude runtime 状态 | codex 的报告级别 |
+|---|---|
+| 未登录（无任何可用 runtime） | `FAIL  runtime unavailable: codex` |
+| 已登录（有一个可用 runtime） | `WARN  optional runtime unavailable: codex` |
+
+即 codex **从来不是必需项**。此前的 FAIL 表达的其实是"一个可用 runtime 都没有"，
+只是措辞落在了 codex 这一行上。
+
+> 这个措辞值得反馈：在 runtime 全不可用时，逐个 runtime 报 `FAIL` 会让人误以为
+> **每一个都必须装**，从而去安装实际并不需要的依赖（本例中差点为此去开 OpenAI 账号）。
+> 表达成"至少需要一个可用 runtime，当前 0 个"会更准确。
+
+---
+
+## 12. 观察：daemon 不能存活于 WSL 会话之外
+
+### 现象
+
+环境搭好后关闭窗口，稍后重跑 `soloco doctor`：
+
+```
+PASS  Node v24.18.0 satisfies >=22.5.0
+FAIL  daemon is not running. Run: soloco start
+```
+
+### 排查
+
+先怀疑崩溃，查日志尾部 —— 没有异常堆栈，是正常的启动完成记录：
+
+```
+Listening on http://127.0.0.1:8751
+State persisted to /home/liuyi/.soloco/daemon.db
+```
+
+真正的线索在 uptime：
+
+```
+up 8 minutes
+PID 1 起始时间: Tue Jul 28 15:29:57 2026
+```
+
+**整个 WSL 虚拟机被销毁并重建过。** daemon 不是崩溃，是随宿主一起没了。
+
+### 判断
+
+WSL2 在最后一个交互会话退出后会终止该发行版，**后台进程不构成保活**。
+而 SoloCo 的 daemon 没有自启机制（无 systemd 单元 —— 本环境 `systemd=false`；
+也无 Windows 侧计划任务）。
+
+净效果：**关掉终端窗口 = daemon 停止**。下次使用必须手动 `soloco start`。
+
+对一个自我定位为「local-first 长期使命型 agent 操作系统」的产品，
+其守护进程的生命周期被终端会话绑死，是一个值得确认的平台限制 ——
+需要区分这是 WSL 平台的固有约束、还是产品未提供 WSL 下的保活方案。
+
+**留待下一轮正式测试验证**，本轮只记录现象，不下结论。
+
+### 附带记录：启动期的一条错误
+
+```
+[managed-mcp] boot connection refresh failed: managed_mcp_auth_required
+```
+
+出现在每次 daemon 启动时。当前未观察到功能影响，记录备查。
 
 ---
 
 ## 附：待办 / 未决项
 
-* [ ] Claude Code 登录（本人操作）
-* [ ] 决定是否安装 codex runtime
+* [x] Claude Code 登录 —— 已完成，`claude` runtime LOGIN=ok
+* [x] codex runtime —— 确认为**可选**，无需安装
+* [ ] daemon 保活方案（关窗口即停）—— 下一轮测试确认是平台约束还是产品缺口
+* [ ] `managed_mcp_auth_required` 启动期报错 —— 待查
 * [ ] 免密 sudo 目前是打开的（`/etc/sudoers.d/90-liuyi`）。如需改为密码保护：
       `wsl -d Ubuntu-24.04 -u root passwd liuyi` 设密码后删除该文件
 * [ ] Windows 侧 `AppData\Roaming\npm\` 中的 soloco/claude 残留未清理（只记录未删除）
+
+---
+
+## 附：环境速查
+
+进入环境：PowerShell 里执行 `wsl ~`（本环境用 `wsl --import` 安装，
+不走 Store，因此**没有开始菜单快捷方式**）。
+
+| 命令 | 作用 |
+|---|---|
+| `proxy_on` / `proxy_off` | 开关代理，宿主机 IP 动态解析 |
+| `winopen <url>` | 用 Windows 默认浏览器打开链接 |
+| `soloco start --no-open` | 启动 daemon 且不自动开浏览器 |
+| `soloco doctor` | 环境自检 |
+| `relink-node-tools` | nvm 换 node 版本后重建 `/usr/local/bin` 软链 |
