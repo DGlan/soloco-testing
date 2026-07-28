@@ -1,0 +1,46 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 虚拟环境：体积大、平台相关、可由 requirements 重建，绝不入库
+.venv/
+venv/
+env/
+
+# --- 密钥与凭据 ---
+# 本仓库不应出现任何密钥。这些规则是兜底，不是许可。
+.env
+.env.*
+*.key
+*.pem
+*.p12
+id_rsa*
+id_ed25519*
+secrets.*
+credentials.*
+.soloco/
+
+# --- 运行期产物 ---
+# 实验数据（experiment_log.csv / transcripts / answers.md）是**有意提交**的，
+# 属于测试证据。这里排除的是本地跑出来的临时垃圾。
+*.log
+*.tmp
+tmp/
+scratch/
+
+# --- 编辑器 / IDE ---
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- 操作系统 ---
+# Windows
+Thumbs.db
+desktop.ini
+Desktop.ini
+$RECYCLE.BIN/
+# macOS
+.DS_Store

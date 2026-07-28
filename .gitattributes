@@ -1,0 +1,9 @@
+# 仓库内统一用 LF；检出到 Windows 时由 core.autocrlf 决定，不在这里强制。
+* text=auto eol=lf
+
+# CSV 由脚本以 utf-8-sig + CRLF 写出，是实验原始产物。
+# 标记为二进制，禁止 git 做任何换行符转换，保证字节级一致。
+*.csv -text
+
+# transcripts 是原始证据，同样不做转换。
+experiment/transcripts/*.json -text
