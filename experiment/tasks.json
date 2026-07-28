@@ -1,0 +1,34 @@
+{
+  "tasks": [
+    {
+      "task_id": "T1_simple",
+      "query": "Diffusion Policy的作者是谁？",
+      "difficulty": "simple",
+      "rationale": "单 chunk 事实检索，作者名在论文首页",
+      "expected_keywords": ["Cheng Chi", "Zhenjia Xu", "Shuran Song"]
+    },
+    {
+      "task_id": "T2_medium",
+      "query": "Diffusion Policy用了哪两种网络架构？",
+      "difficulty": "medium",
+      "rationale": "具体技术细节，需要定位到架构章节",
+      "expected_keywords": ["CNN", "Transformer"]
+    },
+    {
+      "task_id": "T3_hard",
+      "query": "能量模型和扩散模型有什么区别？",
+      "difficulty": "hard_multihop",
+      "rationale": "跨文档综合（EBM/IBC 内容 + DDPM/DP 内容），中文问英文语料，预期触发 rewrite 循环",
+      "expected_keywords": ["energy", "EBM", "Energy"]
+    }
+  ],
+  "protocol": {
+    "rounds_per_task": 5,
+    "runner": "claude -p (headless), fixed prompt template, cwd = rag-qa",
+    "model": "claude-sonnet-5 (pinned for comparability)",
+    "max_turns": 6,
+    "timeout_seconds": 300,
+    "execution": "strictly sequential, no concurrency",
+    "token_accounting": "input_tokens = api input + cache_creation + cache_read; raw breakdown kept in transcripts/"
+  }
+}
