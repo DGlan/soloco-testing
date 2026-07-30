@@ -398,3 +398,131 @@ if (e.method === "tools/call" &&
 
 这是一个真实的可用性缺陷：用户无法从界面判断自己授予了哪一类权限。
 建议在两处分别标注通道类型与能力边界。定级 **Medium（可用性 / 权限透明度）**。
+
+### 9-9 运行时取证：managed-MCP 是「云端 relay + 策略闸门」，副作用管控不在本地
+
+第 9-3 节据本地代码得出「MCP 通道无语义闸门」。授权 gmail 测试邮箱后，
+运行时取证表明**这个结论只对了一半**：本地确实没有语义闸门，
+但语义管控整体上移到了云端 relay。以下均为零 token、只读取证。
+
+#### 授权后的状态
+
+```
+GET /managed-mcp/connections
+→ connections:[{ id:"<conn-id>", provider:"gmail",
+                 environment:"live", status:"connected", authorizationEpoch:1 }]
+
+sqlite> select credential_type from credential_records;
+email        ← 仍只有自研通道这一条
+```
+
+**MCP 凭据不落本地**——`credential_records` 授权前后都只有自研邮件那一条。
+gmail 的 MCP 凭据由云端代管，本地只持有连接引用。
+
+#### relay 形态
+
+managed-MCP 的实际数据路径是 `POST <cloud-base>/api/soloco/managed-mcp/sessions/<id>/mcp`，
+用户自己的 `accessToken` 鉴权。initialize 应答：
+
+```
+server: Vercel
+{"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{"listChanged":true}},
+ "serverInfo":{"name":"mcp-typescript server on vercel","version":"0.1.0"}}}
+```
+
+即一个 **Vercel 上的无状态 JSON-mode MCP server**。会话由 URL 里的 sessionId +
+Bearer token 绑定，无独立会话头。
+
+#### 能力面是动态的，`tools/list` 会严重低估
+
+对 gmail 连接调 `tools/list`，只返回 **3 个 Composio 元工具**：
+
+| 工具 | 语义 |
+|---|---|
+| `COMPOSIO_SEARCH_TOOLS` | 按用例检索本会话「已批准的动作」 |
+| `COMPOSIO_GET_TOOL_SCHEMAS` | 取某 action slug 的入参 schema |
+| `COMPOSIO_MULTI_EXECUTE_TOOL` | 执行已批准的 action slug |
+
+**真实能力（能不能发信）不是工具名，而是 `COMPOSIO_MULTI_EXECUTE_TOOL` 的参数
+（action slug），且这些 slug 是「本会话已批准」的动态集合。**
+
+这直接修正了第 9-4 节的测试设计前提：**「gmail 是否暴露发信工具」无法用 `tools/list` 回答**，
+因为工具是动态的、按会话批准的。这也是我此前判读脚本出错的原因——
+它去工具名里找 `send`，而 gmail 的工具名里根本没有业务动词。
+
+#### 关键发现：relay 有双向策略闸门，且完全在云端
+
+尝试用用户自己的合法 token 从外部枚举「已批准动作」时，连续撞到两道 relay 闸门：
+
+| 阶段 | 返回 | 含义 |
+|---|---|---|
+| 请求入站 | `RELAY_POLICY_DENIED` / `meta_unknown_field` | **请求 gate**：请求结构不合策略即拒 |
+| 响应出站 | `PROVIDER_POLICY_DRIFT` / `Response gate rejected (meta_response_shape_invalid)` | **响应 gate**：上游 provider 的应答结构不合策略也拒 |
+
+**这四个策略码在本地 `cli.js` 中出现 0 次**（已 grep 确认）——
+它们纯粹来自云端 relay。也就是说：
+
+> managed-MCP 的策略校验是**服务端强制、双向（请求+响应）、本地不可见**的。
+> 本地客户端看不到、也无法关闭这层校验。
+
+#### 对第 9-3 节的完成与对威胁模型的结论
+
+第 9-3 节「本地无语义闸门」成立，但不完整。完整图景是：
+
+```
+本地 daemon:  方法白名单 + 逐 run 租约 + 尺寸/超时      （无业务语义）
+     ↓ 经 accessToken 鉴权的 relay 会话
+云端 relay:   请求 gate + 响应 gate（PROVIDER_POLICY_DRIFT / RELAY_POLICY_DENIED）
+     ↓
+Composio:     按会话批准的 action slug 集合
+```
+
+因此第 15 节「MCP 是否构成副作用管控的旁路」这一威胁，
+**在 relay 层得到实质缓解**，而非仅靠本地：
+
+* 持有用户合法云端 token 的**外部进程**，仍无法自由枚举/驱动 provider 动作——
+  被 relay 的策略闸门挡住（实测 `RELAY_POLICY_DENIED` → `PROVIDER_POLICY_DRIFT`）。
+* 能力集是**按 run 的 `capabilityRequests` 在云端动态批准**的，不是静态开放。
+
+这是一个**偏正面的架构结论**，比原计划「发一封信看是否降级为草稿」信息量更大：
+管控点在云端 relay，且对本地不可见、不可绕过。
+
+#### 本轮**没有**做、以及为什么
+
+**我没有尝试去满足/绕过那道响应策略闸门。** 让一个外部非 agent 客户端
+通过 relay 成功执行 Gmail 动作，等于绕过一个 relay 明确标注为 "policy gate" 的安全控制——
+这既非本测试所需，也不应去做。**闸门把外部客户端挡在门外，这件事本身就是结论。**
+
+#### 仍未定论的一点，与唯一正当的下一步
+
+「agent 经 MCP 发信是否被降级为草稿/是否要审批」这一具体问题，
+本轮**仍未直接观测到**——因为要观测它，必须走**真实 agent 路径**
+（agent 的请求才能合法通过 relay 闸门）。那条路径：
+
+* 会**真实发出一封邮件**（有外部副作用，不可撤回）
+* 会**消耗 token**（要跑一个真实 goal）
+
+因此它必须满足全部前置条件才可执行，且需使用者明确逐次授权：
+
+| 前置 | 要求 |
+|---|---|
+| 收发件人 | 同一个**专用测试邮箱**，自己发给自己，不涉及任何真实联系人 |
+| 邮箱数据 | 该邮箱无真实数据（agent 已具备读取该邮箱的能力） |
+| 观测 | 全程 `mcp/watch_email_gate.sh before/after`，看 `email_reply_ledger`、
+      是否出现无 approve 的 `email_sent` 事件 |
+| 支付通道 | `stripe` 同在此 relay 且默认关闭，**不在范围内，不touch** |
+
+在满足上述条件、且使用者明确同意「真实发信 + 消耗 token」之前，此步不执行。
+
+#### 本轮产物
+
+| 文件 | 内容 |
+|---|---|
+| `mcp/list_managed_tools.sh` | 经云端 relay 只读枚举某 provider 的 `tools/list`（零 token） |
+| `mcp/search_actions.sh` | 尝试只读枚举「已批准动作」；实测被 relay 响应 gate 拦下 |
+| `mcp/evidence/tools_gmail.json` | gmail 的 3 个 Composio 元工具及 schema |
+| `mcp/evidence/init_gmail.json` | relay initialize 应答（证明 Vercel 无状态 MCP） |
+| `mcp/evidence/session_gmail.json` | 会话申请应答 |
+| `mcp/evidence/actions_gmail_*.json` | 响应 gate 拒绝记录（`PROVIDER_POLICY_DRIFT`） |
+
+所有产物已脱敏：无 token、无邮箱、会话/请求 id 与云端域名以占位符替换。

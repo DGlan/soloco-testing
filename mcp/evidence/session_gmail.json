@@ -1,0 +1,1 @@
+{"sessionId":"<session-id>","state":"active","expiresAt":"2026-07-30T10:23:00.775Z","manifest":{"tools":[{"name":"COMPOSIO_SEARCH_TOOLS","description":"Search tools for gmail"},{"name":"COMPOSIO_GET_TOOL_SCHEMAS","description":"Get tool schemas for gmail"},{"name":"COMPOSIO_MULTI_EXECUTE_TOOL","description":"Execute tools for gmail"}]}}
