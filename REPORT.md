@@ -69,7 +69,7 @@ SQLite 库与事件流来观测行为，并用**受控故障注入**填出错误
 
 ## 2. 发现
 
-### 2.1 token 计数漏 cache，面板自相矛盾（高 / 已证实）
+### 2.1 token 计数漏 cache，面板上价格偏高（高 / 已证实）
 
 - **现象**：面板对某 goal 同时显示「累计 token 7,404」与「成本 $0.85」。
 - **证据**：
@@ -81,7 +81,7 @@ SQLite 库与事件流来观测行为，并用**受控故障注入**填出错误
     一处用错，可精确定位到汇总那一行。
 - **影响**：两个数字物理上不可能同时正确；对订阅制用户，token 是唯一直观消耗信号，
   而它恰好是错的。严重性在**信任与可解释性**，金额本身估算尚准（$0.85 vs 真实 $0.83）。
-- **建议**：`total = input + cache_creation + cache_read + output`。所以建议加入手段允许用户调取dashboard看到token每项细则。
+- **建议**：`total = input + cache_creation + cache_read + output`。所以建议加入手段允许用户调取dashboard看到token每项细则，类似claude code /usage命令符。
 
 ### 2.2 结构化输出截断 / schema 校验失败（高 / 已证实）
 
