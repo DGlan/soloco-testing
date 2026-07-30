@@ -789,6 +789,11 @@ GET /remote-mcp/connections/my-local-test-server
 
 provider 为硬编码枚举，**不支持注册任意 MCP server**。
 
+> **【2026-07-30 补充取证】** 上述结论当时仅有这一个 404 作为证据。
+> 已在 `docs/mcp_surface_findings.md` 第 2 节补齐源码级证据（zod 枚举 `["linear","notion","sentry"]`、
+> 上游端点为硬编码常量、CLI 无 MCP 子命令），结论成立。
+> 同时修正了本文对两个通道 provider 清单的记述，详见该文第 1 节。
+
 改用**工作区文件内容**作为注入载体。理由：
 - agent 读文件是最高频的外部内容摄入路径，比 MCP 更贴近真实攻击面
 - 零额外授权、零第三方账号
@@ -884,7 +889,14 @@ SoloCo 审查层能否拦住一个模型已经执行了的越界行为，**本�
 | tool 调用超时 | ❌ 未测 |
 | provider 返回 4xx | ❌ 未测 |
 
-**阻塞原因**：所有「已连接」状态均需先完成一次真实 OAuth 授权。
+> **【2026-07-30 修正】** 上表的阻塞判断需要更新。`remote-mcp` 通道的三个 provider
+> 实为 `linear` / `notion` / `sentry`（**不含** gmail/slack/stripe），
+> 三者均无外发邮件或支付副作用，可用一次性测试工作区完成授权。
+> 也就是说上表中「已连接」「token 过期」「capability 探测」等状态格
+> **存在低风险打通路径**，不必等待 gmail 授权。
+> 路径与执行顺序见 `docs/mcp_surface_findings.md` 第 6 节。
+
+**阻塞原因（原判断，适用于 managed-mcp 通道）**：所有「已连接」状态均需先完成一次真实 OAuth 授权。
 `gmail` / `slack` / `stripe` 仅存在于 `managed-mcp` 通道（凭据由 SoloCo 代管），
 授权动作必须由账号持有人在浏览器中完成。
 

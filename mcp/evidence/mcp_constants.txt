@@ -1,0 +1,68 @@
+# 从 dist/cli.js 提取的 MCP 常量
+# cli_js_sha256: c91bd28220a502404f3d9b4f88a1fd555921a2f352112c836c92074667f71381
+
+## remote-mcp provider 枚举（zod enum，编译期固定）
+Yd=["linear","notion","sentry"]
+
+## remote-mcp scope profile 枚举
+["linear_read_write","notion_selected_workspace_content","sentry_single_project_diagnostics"]
+
+## 授权状态机
+c.enum(["disconnected","authorizing","connected","needs_reconnect"])
+
+## capability 探测状态
+c.enum(["not_probed","ready","incompatible"])
+
+## 上游 MCP 端点（硬编码常量，无 env 覆盖）
+https://mcp.linear.app
+https://mcp.linear.app/.well-known/oauth-protected-resource
+https://mcp.linear.app/mcp
+https://mcp.notion.com
+https://mcp.notion.com/.well-known/oauth-protected-resource
+https://mcp.notion.com/mcp
+https://mcp.sentry.dev
+https://mcp.sentry.dev/.well-known/oauth-protected-resource/mcp
+https://mcp.sentry.dev/mcp
+
+## probe 失败原因码
+remote_mcp_access_token_resolution_aborted
+remote_mcp_access_token_unavailable
+remote_mcp_attempt_not_found
+remote_mcp_authorization_denied
+remote_mcp_authorization_superseded
+remote_mcp_concurrency_exhausted
+remote_mcp_connection_disconnecting
+remote_mcp_discovery_failed
+remote_mcp_initialize_id_required
+remote_mcp_initialize_response_invalid
+remote_mcp_invalid_callback
+remote_mcp_invalid_json
+remote_mcp_invalid_request
+remote_mcp_lease_revoked
+remote_mcp_metadata_changed
+remote_mcp_method_rejected
+remote_mcp_oauth_
+remote_mcp_probe_failed
+remote_mcp_probe_timeout
+remote_mcp_provider_disabled
+remote_mcp_provider_not_found
+remote_mcp_proxy_limits_invalid
+remote_mcp_proxy_unavailable
+remote_mcp_redirect_rejected
+remote_mcp_refresh_failed
+remote_mcp_registration_failed
+remote_mcp_request_aborted
+remote_mcp_request_failed
+remote_mcp_request_id_required
+remote_mcp_request_idle_timeout
+remote_mcp_request_timeout
+remote_mcp_request_too_large
+remote_mcp_revoke_failed
+remote_mcp_scope_insufficient
+remote_mcp_server_request_rejected
+remote_mcp_session_closed
+remote_mcp_token_exchange_failed
+remote_mcp_tool_name_required
+remote_mcp_transport_failed
+remote_mcp_unavailable
+remote_mcp_upstream_idle_timeout

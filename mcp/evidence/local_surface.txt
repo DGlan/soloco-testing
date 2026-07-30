@@ -1,0 +1,22 @@
+# ~/.soloco 权限快照（仅元数据，不含内容）
+total    
+drwxr-xr-x <user> <user> 4096 .
+drwxr-x--- <user> <user> 4096 ..
+-rw-r--r-- <user> <user> 67 analytics-id.json
+-rw-r--r-- <user> <user> 41 app-opens.json
+-rw------- <user> <user> 858 auth.json
+-rw------- <user> <user> 65 daemon-token
+-rw-r--r-- <user> <user> 2105344 daemon.db
+-rw-r--r-- <user> <user> 32768 daemon.db-shm
+-rw-r--r-- <user> <user> 4251872 daemon.db-wal
+-rw-r--r-- <user> <user> 99 daemon.db.lock
+-rw-r--r-- <user> <user> 46975 daemon.log
+-rw-r--r-- <user> <user> 5 daemon.pid
+-rw------- <user> <user> 65 email-approval-token
+drwxr-xr-x <user> <user> 12288 files
+-rw-r--r-- <user> <user> 112 trusted-roots.json
+
+# MCP 相关表的行数（只读打开，不修改）
+credential_records: 1
+payment_connections: 0
+settings: 0

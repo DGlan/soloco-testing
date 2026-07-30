@@ -17,8 +17,14 @@ soloco-testing/
 │   ├── experiment_log.csv       每轮一行的结构化结果
 │   ├── answers.md               人工判读用的答案汇总
 │   └── transcripts/             每轮完整的原始 JSON
+├── mcp/                         MCP 接入面取证（零 token）
+│   ├── probe_mcp_surface.sh     取证脚本，可独立复跑
+│   └── evidence/                端点认证矩阵、provider 枚举、状态机、环境指纹
 └── docs/
-    └── wsl_setup_log.md         WSL2 测试环境搭建全过程（含每个报错的根因与解法）
+    ├── wsl_setup_log.md         WSL2 测试环境搭建全过程（含每个报错的根因与解法）
+    ├── wsl_goal_run_findings.md 首轮 goal 运行观察 + 错误分类真值表 + 注入实验
+    ├── MCP_测试报告.md           MCP 定向测试报告（交付版）
+    └── mcp_surface_findings.md  MCP 接入面取证结论（含对上述两份的修正）
 ```
 
 ---
@@ -210,6 +216,27 @@ UTF-8 with BOM（方便 Excel 直接打开不乱码）。
 故意保留：当时子进程的中文输出经管道传递时被非 UTF-8 的默认编码破坏成了 U+FFFD 乱码。
 `run_experiment.py` 里强制设置 `PYTHONIOENCODING=utf-8` 和 `PYTHONUTF8=1` 就是为了堵这个问题，
 这份废弃数据是那个决定的依据。
+
+---
+
+## mcp/ —— MCP 接入面取证
+
+`experiment/` 测的是 RAG 问答的稳定性，`mcp/` 测的是 SoloCo 的 MCP 通道**能接什么、接不了什么**。
+
+一条命令复跑，**零 token**：
+
+```bash
+bash mcp/probe_mcp_surface.sh
+```
+
+脚本只做两件事：对本地 daemon 的 MCP 端点做 HTTP 探测，以及从已安装包里提取编译期常量。
+不启动任何 goal，因此不消耗配额。产物落在 `mcp/evidence/`，
+结论写在 `docs/mcp_surface_findings.md`。
+
+这一轮取证修正了此前两份文档中的三处陈述，也定位到了一个此前无解释的 P0 的机制，
+细节见 `docs/mcp_surface_findings.md`。其中值得单独一提的是：
+`environment.txt` 记录了 `cli.js` 的 sha256 —— 所有静态结论都锚定在这个校验和上，
+**SoloCo 升级后结论需要复验**。
 
 ---
 

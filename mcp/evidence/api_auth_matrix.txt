@@ -1,0 +1,11 @@
+# MCP 端点认证要求矩阵
+# collected_at_utc: 2026-07-30T08:58:15Z
+
+ENDPOINT                                       NO_AUTH      WITH_AUTH    VERDICT
+/remote-mcp/connections                        200          200          UNAUTHENTICATED
+/remote-mcp/connections/linear                 200          200          UNAUTHENTICATED
+/remote-mcp/connections/notion                 200          200          UNAUTHENTICATED
+/remote-mcp/connections/sentry                 200          200          UNAUTHENTICATED
+/remote-mcp/connections/gmail                  404          404          same(404)
+/remote-mcp/connections/my-local-test-server   404          404          same(404)
+/managed-mcp/connections                       200          200          UNAUTHENTICATED

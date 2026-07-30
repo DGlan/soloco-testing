@@ -1,5 +1,10 @@
 # SoloCo MCP 定向连接测试报告
 
+> **【2026-07-30 补充】** 本报告发布后补做了一轮零成本静态取证，
+> 修正了其中关于两个 MCP 通道 provider 清单的记述，并细化了错误分类结论的适用范围。
+> 修正内容与证据见 [`mcp_surface_findings.md`](mcp_surface_findings.md)，
+> 取证脚本见 [`../mcp/probe_mcp_surface.sh`](../mcp/probe_mcp_surface.sh)。
+
 **测试对象**：SoloCo（`@soloco/client`）0.2.1
 **测试平台**：WSL2 / Ubuntu 24.04 LTS（SoloCo 官方不支持 Windows 原生）
 **测试方法**：直接读取 daemon 的 SQLite 库与 HTTP 端点，不依赖界面显示

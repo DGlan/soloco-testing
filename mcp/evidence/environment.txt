@@ -1,0 +1,9 @@
+collected_at_utc: 2026-07-30T08:58:15Z
+soloco_version:   0.2.1
+node_version:     v24.18.0
+os:               Linux 5.10.16.3-microsoft-standard-WSL2
+distro:           Ubuntu 24.04 LTS
+cli_js:           /home/<user>/.nvm/versions/node/v24.18.0/lib/node_modules/@soloco/client/dist/cli.js
+cli_js_sha256:    c91bd28220a502404f3d9b4f88a1fd555921a2f352112c836c92074667f71381
+daemon_status:    Soloco: running
+listen:           LISTEN 0 511 127.0.0.1:8751 0.0.0.0:* 
