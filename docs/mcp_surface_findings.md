@@ -344,3 +344,57 @@ if (e.method === "tools/call" &&
 
 9-2、9-3 为静态取证，结论限于**客户端代码写了什么**。
 9-4 的预判**尚未经运行时验证**，在第 2、3 步完成前不应作为结论引用。
+
+### 9-7 UI 取证：gmail 可能是错误的测试对象
+
+从 UI bundle 提取的 8 个 managed 连接能力描述（`dist/web/assets/index-*.js`）：
+
+| provider | 描述 | 语义 |
+|---|---|---|
+| `gmail` | Read and organize email as mission evidence.<br>读取和整理邮件，作为任务证据。 | **只读** |
+| `slack` | Read channels and **deliver** mission output. | **可外发** |
+| `linkedin` | Reach decision-makers and **maintain** professional content. | **可发布** |
+| `stripe` | **Create** payment links and track order revenue. | **可创建收款** |
+| `notion` | **Write** results into your workspace. | 可写 |
+| `hubspot` | Maintain customer and lead records. | 可写 |
+| `linear` | Track issues and sync progress. | 可写 |
+| `sentry` | Monitor errors and attribute them to changes. | 只读 |
+
+**gmail 的描述里没有发信。** 若属实，则用 gmail 测「闸门是否覆盖 MCP 路径」
+会落进第 9-4 节表格的第一行——**「不绕过」是因为没给发信能力，而非有闸门**，
+定级 Medium，且这个结论对其它 provider 不成立。
+
+相反，`slack`（deliver mission output）与 `linkedin`（maintain professional content）
+的描述明确包含外发语义。**若要测副作用闸门，这两个才是对的靶子。**
+
+其中 **slack 优于 gmail 作为测试对象**：
+
+* 描述层面明确可外发，能真正触发「有副作用但无闸门」的组合
+* 自建一个空 workspace、发到自己的私有频道，可控性高于邮件
+* 消息可删除，邮件发出不可撤回
+* SoloCo 的自研路径**没有** slack 对应物（自研只有邮件与支付），
+  因此若 slack 外发不经任何审批，即可直接证明「闸门挂在自研实现上而非副作用抽象层」
+
+> ⚠️ 上表是 **UI 文案**，属产品描述而非权威 scope 声明。
+> 权威来源有两个，且都在真正授权之前/之中即可获得：
+> 1. **OAuth 同意页本身** —— Google / Slack 的授权页会逐条列出申请的 scope。
+>    这一屏就是证据，**授权前截图即可**，此时尚未授予任何权限。
+> 2. `tools/list` —— 连接建立后只读枚举工具清单。
+>
+> 两者任一与 UI 文案矛盾，以它们为准。
+
+### 9-8 附带发现：UI 里「Gmail」出现两次，语义不同
+
+同一个 daemon 的 UI 中，Gmail 以两种互不相干的身份出现：
+
+| 入口 | 实际是什么 | 能否发信 | 是否有审批闸门 |
+|---|---|---|---|
+| 「Connect my email」 | 自研邮件通道（`credential_type=email`） | 能 | **有**（草稿 → approve → confirm-send） |
+| 资产页 Gmail 卡片 | managed-MCP 连接 | 据描述只读 | 无语义闸门 |
+
+两者共用「Gmail」这一名称，UI 上没有任何提示说明它们是两条独立通道、
+能力与管控完全不同。**本轮测试的第一次尝试就因此走错**——
+授权了自研通道却以为连上了 MCP（见第 9-1 节）。
+
+这是一个真实的可用性缺陷：用户无法从界面判断自己授予了哪一类权限。
+建议在两处分别标注通道类型与能力边界。定级 **Medium（可用性 / 权限透明度）**。
