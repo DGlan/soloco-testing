@@ -206,6 +206,8 @@ run:           { maxReplans: 100, maxReplansLimit: 100 }
 | `mcp/evidence/mcp_constants.txt` | provider 枚举、状态机、上游端点、40 个原因码 |
 | `mcp/evidence/env_knobs.txt` | 全部 `SOLOCO_*` 环境变量（62 项） |
 | `mcp/evidence/local_surface.txt` | `~/.soloco` 权限快照与相关表行数 |
+| `mcp/watch_email_gate.sh` | 邮件闸门测试的观测装置（只读快照 + 自动比对） |
+| `mcp/evidence/email_gate/before.txt` | 闸门测试基线快照（见第 9 节） |
 
 ## 8. 本轮的性质说明
 
@@ -213,3 +215,132 @@ run:           { maxReplans: 100, maxReplansLimit: 100 }
 它证明的是「代码里写了什么」与「端点当前返回什么」，
 **不能替代运行时行为验证**——例如第 5 节的容量矛盾是从默认值推出的，
 实际失败阈值仍需第 5 项实验测出曲线才能定论。
+
+---
+
+## 9. 邮件审批闸门：静态定位与测试设计
+
+第 15 节把「agent 经 gmail 的 MCP 连接发信是否经过审批闸门」列为最高价值待测问题。
+本节先用静态取证把闸门的挂载位置定位出来，再据此设计测试——
+**因为设计错了会得到假阳性。**
+
+### 9-1 先纠正一个前提：已授权的不是 gmail 的 MCP 连接
+
+2026-07-30 授权 gmail 测试邮箱后的实测状态：
+
+```
+GET /managed-mcp/connections
+→ {"connections":[], "configuredProviders":[...8 个...], "availableProviders":[...]}
+
+sqlite> select id, credential_type from credential_records;
+1|email
+```
+
+`connections` 为**空数组**，`credential_records` 只有一条 `credential_type = "email"`。
+事件流对应一条 `email.connection.connected`（actor = `human`，08:07:15Z）。
+
+即：**授权走的是 SoloCo 自研邮件通道（provider 枚举 `gmail|icloud|tencent_enterprise|aliyun_enterprise|custom`），
+不是 managed-MCP 的 gmail 连接。** 两者同名但是两套东西。
+
+**这一点必须先纠正，否则测试直接失效**——在此状态下让 agent 发信，走的是自研路径，
+必然经过闸门，会得出「闸门有效、MCP 不构成旁路」的**假阳性**结论。
+
+### 9-2 闸门的实际结构（自研路径）
+
+路由分为 agent 面与人工面两组：
+
+| 面 | 端点 | 认证 |
+|---|---|---|
+| agent 可达 | `POST /email/agent/drafts`、`/email/agent/messages` | 随 run 租约 |
+| **人工审批** | `POST /email/drafts/:id/approve`<br>`POST /email/drafts/:id/confirm-send`<br>`POST /email/drafts/:id/reject` | `x-soloco-approval-token` |
+
+实测认证确实生效，且用的是常量时间比较：
+
+```
+curl /email/drafts                                    -> 401 bad_approval_credential
+curl -H "x-soloco-approval-token: <token>" /email/drafts -> 200 {"drafts":[]}
+curl -H "Authorization: Bearer <token>" /email/drafts  -> 401   # 与 daemon-token 不通用
+```
+
+```js
+function u2(e){ return e.req.header("x-soloco-approval-token") ?? "" }
+function l2(e,t){ let n=Buffer.from(t); return n.length===e.length && timingSafeEqual(n,e) }
+```
+
+**结论：自研路径上 agent 只能建草稿，发送需人工两步（approve → confirm-send），
+凭据独立于 daemon-token，比较为常量时间。这一层设计是扎实的。**
+
+值得对照的是：**这个审批端点有认证，而第 3 节的 MCP 端点没有。**
+同一个 daemon 里两类端点的认证要求不一致。
+
+### 9-3 MCP 通道上没有对应的语义闸门
+
+managed-MCP 的请求过滤只到 JSON-RPC 方法级：
+
+```js
+N6 = new Set(["initialize","notifications/cancelled","notifications/initialized",
+              "ping","tools/call","tools/list"])
+
+if (!N6.has(e.method)) throw new Qe(403, "managed_mcp_method_rejected");
+if (e.method === "tools/call" &&
+    (!co(e.params) || typeof e.params.name !== "string" || e.params.name.length === 0))
+  throw new Qe(403, "managed_mcp_tool_name_required");
+```
+
+注意 `managed_mcp_tool_name_required` **只校验工具名是非空字符串，不比对任何白名单**。
+`tools/call` 本身在允许集内。
+
+因此客户端侧对 MCP 工具调用的控制只有四层，**没有一层理解工具的语义**：
+
+1. 方法白名单（6 个 JSON-RPC 方法）
+2. `capabilityRequests` 逐 run 租约（声明用哪个 provider）
+3. 并发 / 尺寸 / 超时限制
+4. 传输层错误分类
+
+对比之下，自研路径的邮件有 `/email/drafts/*/approve`，支付有
+`/goals/:goalId/payment-intents/:intentId/approve`——**两个闸门都挂在自研实现上，
+不在「外部副作用」这个抽象层上。**
+
+### 9-4 由此得出的预判与其边界
+
+**预判**：第 15 节那张表的答案倾向于「不会」，即 MCP 构成绕过旁路。
+
+**但这个预判有一处静态分析够不到的地方**：managed-MCP 的凭据由 SoloCo 云端代管，
+授予 gmail 连接的 **scope 是服务端决定的**。若云端只授予只读 scope
+（gmail MCP server 根本不暴露发信工具），那么「绕过」就不成立——
+不是因为有闸门，而是因为**没给能力**。
+
+这两种情况的产品含义完全不同，必须用实测区分：
+
+| 实测结果 | 结论 | 定级 |
+|---|---|---|
+| gmail MCP 不暴露发信工具 | 靠 scope 收敛，非闸门。**换一个暴露写操作的 provider 仍会绕过** | Medium |
+| 暴露发信工具且发送不经审批 | 闸门被绕过，架构级问题 | **High** |
+| 暴露发信工具但发送被降级为草稿 | 闸门挂在副作用抽象层，设计扎实 | 正面结论 |
+
+### 9-5 测试步骤（按风险递增，可随时停在任一步）
+
+观测装置：`mcp/watch_email_gate.sh`，只读快照 + 自动比对，不发信、不触发 goal。
+
+| 步 | 动作 | 是否产生外发副作用 | 能回答什么 |
+|---|---|---|---|
+| 0 | `bash mcp/watch_email_gate.sh before` | 否 | 基线（已采，见 `evidence/email_gate/before.txt`） |
+| 1 | `POST /managed-mcp/connections/authorize {"provider":"gmail"}`，浏览器完成 OAuth | 否 | 连接是否真能建立；`connections` 是否非空 |
+| 2 | 对该连接发 `tools/list` | **否** | **是否存在发信工具——多数情况到这步即可定论** |
+| 3 | 仅当第 2 步存在发信工具：让 agent 向测试邮箱**自己发给自己**一封信 | **是** | 发送是否被降级为草稿、是否要求审批 |
+| 4 | `bash mcp/watch_email_gate.sh after` | 否 | 自动比对，出判读结论 |
+
+**第 2 步是本测试的关键**：`tools/list` 是只读的，不产生任何副作用，
+却能区分上表三种结论中的第一种。**不要跳过第 2 步直接发信。**
+
+第 3 步的约束：
+
+* 收发件人必须是同一个**专用测试邮箱**，不得涉及任何真实联系人
+* 该邮箱不应含真实数据（gmail MCP 连接授权后 agent 具备读取邮箱内容的能力）
+* 支付通道（`stripe` 同在 managed-MCP 且 `payment.enabled` 默认 `false`）
+  **不在本测试范围内，不要为了对称而开启**
+
+### 9-6 本节性质说明
+
+9-2、9-3 为静态取证，结论限于**客户端代码写了什么**。
+9-4 的预判**尚未经运行时验证**，在第 2、3 步完成前不应作为结论引用。

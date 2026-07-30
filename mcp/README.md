@@ -13,6 +13,17 @@
 bash mcp/probe_mcp_surface.sh
 ```
 
+邮件审批闸门测试的观测装置（同样零 token、不发信、不触发 goal）：
+
+```bash
+bash mcp/watch_email_gate.sh before   # 动作前快照
+# ... 执行被观测动作 ...
+bash mcp/watch_email_gate.sh after    # 动作后快照 + 自动比对
+```
+
+测试设计与判读标准见 `docs/mcp_surface_findings.md` 第 9 节。
+**注意第 9-5 节的步骤顺序**：`tools/list` 是只读的，多数情况下不必真的发信即可定论。
+
 产物写入 `mcp/evidence/`。**零 token 消耗**——脚本只做本地 HTTP 探测与
 已安装包的静态读取，不启动任何 goal。
 
@@ -33,6 +44,7 @@ OUT=/tmp/mcp-evidence bash mcp/probe_mcp_surface.sh
 | `mcp_constants.txt` | provider 枚举、scope profile、状态机、上游端点、40 个原因码 | 「不支持自建 server」这一结论的源码级证据 |
 | `env_knobs.txt` | 全部 `SOLOCO_*` 环境变量 | 后续实验的旋钮清单；其中规划类旋钮见 findings 第 5 节 |
 | `local_surface.txt` | `~/.soloco` 权限快照、相关表行数 | 本地数据面信任模型的证据 |
+| `email_gate/before.txt` | 闸门测试基线：MCP 连接、凭据类型、草稿表、事件流 | 证明测试开始前状态干净 |
 
 ## 注意
 

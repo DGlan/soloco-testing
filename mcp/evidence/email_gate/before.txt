@@ -1,0 +1,25 @@
+phase:      before
+taken_at:   2026-07-30T09:08:33Z
+
+## managed-mcp 连接状态
+{"connections":[],"configuredProviders":["linear","notion","gmail","linkedin","slack","sentry","stripe","hubspot"],"availableProviders":["linear","notion","gmail","linkedin","slack","sentry","stripe","hubspot"]}
+
+## 凭据记录（仅类型与时间戳，不含 payload）
+1|email|1|1|2026-07-30T08:07:15.352Z|2026-07-30T08:07:15.352Z
+
+## 邮件闸门相关表行数
+email_drafts             0
+email_reply_ledger       0
+email_folder_watermarks  1
+
+## 草稿键（不含正文）
+
+## 待审批草稿（daemon 视图）
+{"drafts":[]}
+
+## 近期 email_sent / mcp 相关事件
+1097|email.message.received|2026-07-30T08:14:36.940Z|kernel
+1096|email.message.received|2026-07-30T08:14:36.932Z|kernel
+1095|email.message.received|2026-07-30T08:14:36.926Z|kernel
+1094|email.message.received|2026-07-30T08:14:36.909Z|kernel
+1093|email.connection.connected|2026-07-30T08:07:15.443Z|human
