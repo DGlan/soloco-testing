@@ -2,8 +2,7 @@
 
 本目录存放 SoloCo MCP 通道的取证脚本与原始产物。
 
-与 `experiment/` 的定位一致：**脚本 + 原始数据 + 环境指纹同处一地**，
-结论写在 `docs/mcp_surface_findings.md`，这里只放能重跑的东西。
+定位：**脚本 + 原始数据 + 环境指纹同处一地**，结论写在 `docs/mcp/mcp_surface_findings.md`，这里只放能重跑的东西。
 
 ## 复现
 
@@ -21,7 +20,7 @@ bash mcp/watch_email_gate.sh before   # 动作前快照
 bash mcp/watch_email_gate.sh after    # 动作后快照 + 自动比对
 ```
 
-测试设计与判读标准见 `docs/mcp_surface_findings.md` 第 9 节。
+测试设计与判读标准见 `docs/mcp/mcp_surface_findings.md` 第 9 节。
 **注意第 9-5 节的步骤顺序**：`tools/list` 是只读的，多数情况下不必真的发信即可定论。
 
 产物写入 `mcp/evidence/`。**零 token 消耗**——脚本只做本地 HTTP 探测与

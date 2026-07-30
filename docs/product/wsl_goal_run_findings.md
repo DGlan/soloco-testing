@@ -790,7 +790,7 @@ GET /remote-mcp/connections/my-local-test-server
 provider 为硬编码枚举，**不支持注册任意 MCP server**。
 
 > **【2026-07-30 补充取证】** 上述结论当时仅有这一个 404 作为证据。
-> 已在 `docs/mcp_surface_findings.md` 第 2 节补齐源码级证据（zod 枚举 `["linear","notion","sentry"]`、
+> 已在 `docs/mcp/mcp_surface_findings.md` 第 2 节补齐源码级证据（zod 枚举 `["linear","notion","sentry"]`、
 > 上游端点为硬编码常量、CLI 无 MCP 子命令），结论成立。
 > 同时修正了本文对两个通道 provider 清单的记述，详见该文第 1 节。
 
@@ -894,7 +894,7 @@ SoloCo 审查层能否拦住一个模型已经执行了的越界行为，**本�
 > 三者均无外发邮件或支付副作用，可用一次性测试工作区完成授权。
 > 也就是说上表中「已连接」「token 过期」「capability 探测」等状态格
 > **存在低风险打通路径**，不必等待 gmail 授权。
-> 路径与执行顺序见 `docs/mcp_surface_findings.md` 第 6 节。
+> 路径与执行顺序见 `docs/mcp/mcp_surface_findings.md` 第 6 节。
 
 **阻塞原因（原判断，适用于 managed-mcp 通道）**：所有「已连接」状态均需先完成一次真实 OAuth 授权。
 `gmail` / `slack` / `stripe` 仅存在于 `managed-mcp` 通道（凭据由 SoloCo 代管），

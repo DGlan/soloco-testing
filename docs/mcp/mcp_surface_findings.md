@@ -10,7 +10,7 @@
 
 ## 0. 本轮为什么要做
 
-`docs/wsl_goal_run_findings.md` 第 14-1 节据**一个 404** 得出结论：
+`docs/product/wsl_goal_run_findings.md` 第 14-1 节据**一个 404** 得出结论：
 
 > provider 为硬编码枚举，**不支持注册任意 MCP server**。
 
