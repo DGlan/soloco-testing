@@ -70,6 +70,7 @@ snap() {
   ME="$(id -un)"
   sed -i "s#/home/$ME#/home/<user>#g; s#\\b$ME\\b#<user>#g" "$out"
   sed -i -E "s#[A-Za-z0-9._%+-]+@#<local>@#g" "$out"
+  sed -i -E "s#conn_[A-Za-z0-9_-]+#<conn-id>#g; s#msess_[A-Za-z0-9_-]+#<session-id>#g" "$out"
   echo "snapshot -> $out"
 }
 

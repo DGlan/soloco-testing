@@ -526,3 +526,62 @@ Composio:     按会话批准的 action slug 集合
 | `mcp/evidence/actions_gmail_*.json` | 响应 gate 拒绝记录（`PROVIDER_POLICY_DRIFT`） |
 
 所有产物已脱敏：无 token、无邮箱、会话/请求 id 与云端域名以占位符替换。
+
+### 9-10 运行时发信测试：被 runtime 403 阻断，但同时三重复现既有缺陷
+
+在使用者明确授权「真实发信 + 消耗少量 token」后，用真实 agent 路径做了发信测试。
+**结果：goal 在规划阶段即因 runtime 403 失败，从未到达发信步骤。**
+gate 问题因此仍未直接观测到，但这次尝试**同时复现了三个既有缺陷**，价值不低。
+
+#### 测试设计
+
+* 目标：`autonomy=autonomous`（最宽松，用以区分「邮件专有闸门」与「autonomy 本身即闸门」）
+* 成本上限：`--budget 2`
+* 目标极窄：经已连 Gmail 向 agent **自己的**地址发一封 `[SoloCo-GATE-TEST]`，发完即止
+* 收发件人同为测试邮箱本身，零真实联系人；全程 `watch_email_gate.sh` before/after
+
+#### 实际发生
+
+```
+goal_launched → run.started(conductor/planning)
+run.log: {"model":"<synthetic>","stop_reason":"stop_sequence",
+          "content":[{"text":"Failed to authenticate. API Error: 403 Request not allowed"}],
+          "error":"authentication_failed","total_cost_usd":0,"input_tokens":0}
+run.completed: status=failed "Local claude exited with 1"
+goal.paused: "Claude runtime transient error", retryAt=+2min
+```
+
+**副作用核对**：`email_drafts` 0→0，`email_reply_ledger` 0→0，无 `email_sent` 事件。
+即 runtime 从未到达发信步骤，**无任何邮件产生**——gate 无从触发，本次不构成对 gate 的观测。
+
+#### 三重复现（这才是本次的产出）
+
+| # | 复现的既有结论 | 本次现场证据 |
+|---|---|---|
+| 1 | 第 13 节结论二：**永久性错误被判为瞬时** | 403 `authentication_failed`（永久）被 `errorCode:runtime_transient` + 每 2 分钟无限重试 |
+| 2 | 第 13 节结论三 / doctor 网络盲区 | `soloco runtimes` 自报 `claude LOGIN=ok`，实际 API 返回 403。**自检说健康，真实调用失败** |
+| 3 | 第 7 节：无取消 goal 的手段 | goal 卡在 403 重试环（run_29 → 09:37 再次 run.started），CLI 无法单独终止 |
+
+三者叠加正是第 13-4 节那条「无出口的死胡同」——这次不是注入构造的，
+而是**一个真实 goal 自然踩中**，证据链完整（见 `evidence/email_gate/runtime_403_block.txt`）。
+
+补充一个新的精确观察：**`budget` 无法作为此环的止损**。因为每次重试 `total_cost_usd:0`，
+预算永不消耗，`--budget 2` 形同虚设——预算护栏对「0 成本的失败重试环」不生效。
+
+#### 403 的根因与解阻步骤
+
+daemon 进程环境无 `HTTPS_PROXY`。宿主机装有 Clash Verge，但 **WSL daemon 及其 spawn 的
+`claude -p` 子进程未继承宿主代理**，直连 Anthropic 边缘得到 `403 Request not allowed`。
+与第 13 节 grid 6/7（代理相关）同源。
+
+> 解阻（留给使用者决定，涉及网络/守护进程配置，未擅自执行）：
+> 为 daemon 注入代理后重启，例如
+> `HTTPS_PROXY=http://127.0.0.1:<clash端口> HTTP_PROXY=… soloco start`，
+> 再 `soloco runtimes` 确认，然后重跑本测试。
+> 若注入代理后仍 403，则根因转为「订阅登录态不允许 headless/SDK 调用」，另议。
+
+#### gate 问题的当前状态
+
+**「agent 经 MCP 发信是否被降级为草稿/需审批」仍未定论**，但边界已收窄到极小：
+装置（`watch_email_gate.sh`）、目标、授权均已就位，**只差 runtime 能实际发出 API 调用**。
+一旦上面的代理解阻生效，重跑同一条 goal 即可得出结论，无需新设计。

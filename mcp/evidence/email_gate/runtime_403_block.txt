@@ -1,0 +1,29 @@
+# 运行时发信测试的失败记录（goal 未达发信即被 403 阻断）
+captured_at: 2026-07-30T09:39:37Z
+
+## 运行时可用性（soloco runtimes 自报）
+claude: AVAILABLE=yes LOGIN=ok   <- 注意与下方实际 API 结果矛盾
+
+## 实际 API 结果（run.log 抽取）
+model: <synthetic>   stop_reason: stop_sequence   terminal_reason: api_error
+total_cost_usd: 0    input_tokens: 0   duration_api_ms: 0
+content.text: "Failed to authenticate. API Error: 403 Request not allowed"
+error: authentication_failed   is_api_error_message: true
+
+## 内核分类与后续动作
+errorCode: runtime_transient        <- 永久性 403 被判为瞬时
+goal.paused reason: Claude runtime transient error
+runtime_recovery_scheduled retryAt: +2min   <- 无限自动重试
+
+## 重试证据（同一 goal 的多次 run.started）
+1100|run.started|2026-07-30T09:35:31.316Z
+1109|goal.paused|2026-07-30T09:35:34.244Z
+1115|run.started|2026-07-30T09:37:34.476Z
+
+## daemon 进程环境（发信失败的根因线索）
+HTTPS_PROXY: <未设置>   http_proxy: <未设置>
+宿主机装有 Clash Verge，但 WSL daemon 及其 spawn 的 claude 子进程未继承代理
+
+## 副作用核对（before/after 比对结论）
+email_drafts: 0 -> 0   email_reply_ledger: 0 -> 0   email_sent 事件: 无
+结论：runtime 在规划阶段即 403 失败，从未到达发信步骤，无任何邮件副作用产生。

@@ -1,5 +1,5 @@
-phase:      before
-taken_at:   2026-07-30T09:35:16Z
+phase:      after
+taken_at:   2026-07-30T09:37:37Z
 
 ## managed-mcp 连接状态
 {"connections":[{"id":"<conn-id>","provider":"gmail","environment":"live","selected":true,"status":"connected","authorizationEpoch":1,"cleanupPending":false,"attemptExpiresAt":null,"updatedAt":"2026-07-30T09:20:34.778Z"}],"configuredProviders":["linear","notion","gmail","linkedin","slack","sentry","stripe","hubspot"],"availableProviders":["linear","notion","gmail","linkedin","slack","sentry","stripe","hubspot"]}
