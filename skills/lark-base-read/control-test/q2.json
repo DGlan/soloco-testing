@@ -1,0 +1,6 @@
+{"datasource":{"type":"table","table":{"tableId":"tbluq2rwo9yWa0Qs"}},
+ "dimensions":[{"field_name":"模块","alias":"module"}],
+ "measures":[{"field_name":"标题","aggregation":"count","alias":"cnt"},
+              {"field_name":"耗时分钟","aggregation":"sum","alias":"mins"}],
+ "sort":[{"field_name":"cnt","order":"desc"}],
+ "shaper":{"format":"flat"}}

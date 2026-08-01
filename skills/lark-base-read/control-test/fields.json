@@ -1,0 +1,8 @@
+[
+  {"type":"text","name":"标题"},
+  {"type":"select","name":"模块","multiple":false,
+   "options":[{"name":"画布"},{"name":"安装"},{"name":"其他"}]},
+  {"type":"select","name":"严重程度","multiple":false,
+   "options":[{"name":"严重"},{"name":"一般"},{"name":"轻微"}]},
+  {"type":"number","name":"耗时分钟"}
+]

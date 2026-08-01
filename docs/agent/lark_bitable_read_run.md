@@ -184,13 +184,129 @@ lark-cli base +data-query --base-token $BT --as user --dsl '<按 severity 分组
 
 ---
 
-## 附：本次未解决 / 待办
+---
+
+# 第二轮：收尾遗留项
+
+## 7. `default-as` 改成显式身份
+
+先差点做错一件事：我把 `strict-mode` 描述成「身份不明确就报错的消歧保护」，并据此建议开启。
+读 `--help` 才发现**完全不是**：
+
+```
+bot   只允许机器人身份（用户命令被隐藏）
+user  只允许个人身份（机器人命令被隐藏）
+off   不限制（默认）
+```
+
+是二选一锁死。设成 `user` 会把机器人命令整个藏掉，直接堵死后面「自建应用做群机器人」那条路。
+CLI 的 help 里还专门写了 `DO NOT switch without explicit user confirmation — never run on your own initiative`。
+
+真正对症的是另一个：
+
+```bash
+lark-cli config default-as user      # auto → user
+# strict-mode 保持 off
+```
+
+复测：不带 `--as` 的命令返回 `"identity": "user"` ✓；`--as bot` 仍可用（返回权限错而非「命令不存在」）✓。
+
+> **顺带发现**：`--as bot` 读 Base 报 `99991672 app_scope_not_applied: app cli_aae6e3f199785bc1 has not applied for base:app:read`。
+> 而用户身份早就有 `base:app:read`。
+> —— **用户 OAuth scope 和应用 scope 是两套东西**，`auth login` 补不了应用 scope，得去开发者后台申请。
+> 以后要做群机器人，这一步跑不掉。
+
+## 8. 补 scope —— 差点把环境搞崩
+
+`auth login --help` 里那句 `--scope: Combines additively with --domain/--recommend`，
+说的是**和另外两个 flag 叠加**，没说和已有授权叠加。设备流拿到的新 token 只含本次请求的 scope。
+
+所以照 error hint 直接跑：
+
+```bash
+lark-cli auth login --scope "search:docs:read space:document:retrieve"
+```
+
+**会把现有 138 项冲成 2 项。** 改成先抓现有 scope 做并集（`auth status` 不支持 `--jq`，用 python 解）：
+
+```
+现有: 138  →  新增: search:docs:read, space:document:retrieve  →  请求: 140 项 / 3111 字符
+```
+
+`--no-wait --json` 拿到验证 URL 交给人点，再 `--device-code` 收尾：
+
+```json
+{ "event": "authorization_complete",
+  "newly_granted": ["search:docs:read", "space:document:retrieve"],
+  "missing": [] }
+```
+
+复测 `auth status` → **140 项，两个新 scope 都在**。
+
+`drive +search --query "Bug反馈"` 现在能用了，直接命中目标表：
+
+```json
+{ "doc_types": "BITABLE", "token": "XPXYbiigFaL5QrstToZcadSensg",
+  "owner_name": "谢上子", "is_cross_tenant": true,
+  "url": "https://soloco-ai.feishu.cn/base/XPXYbiigFaL5QrstToZcadSensg" }
+```
+
+`is_cross_tenant: true` —— 再次坐实第 1 节那个更正：跨租户共享是成立的。
+
+> 二维码的坑：`auth qrcode` 的 URL 是**位置参数**不是 `--url`，`--output` 只收当前目录下的相对路径。
+
+**回归**：读取流程（不带 `--as`，走新默认）结果与第一轮完全一致 ✓
+
+## 9. 定位 91403 —— 自建一张表做对照组
+
+补完 scope，`+data-query` 打那张表**仍然 91403**。说明不是 scope 的事。
+
+但光在出问题的表上反复试，分不清是「我不会用」还是「这张表没给权限」。
+**建一张自己拥有的表当对照组**，把变量切干净：
+
+```bash
+lark-cli base +base-create --name "data-query 权限对照测试（可删）" \
+  --table-name "样例" --fields "$(cat fields.json)"
+# → YIzKbO39zaHLpKs0OSmcysO1n1g @ hcnwtmkqrnl9.feishu.cn（自己的租户）
+
+lark-cli base +record-batch-create --base-token <新> --table-id <新> \
+  --json '{"create_records":[…5 条…]}'
+```
+
+> 坑：`--json` 是 `{"create_records":[{字段:值}]}` **扁平映射**，不是 `{"fields":{…}}`。
+
+拿**完全同形**的最简 DSL 打自己的表：
+
+```json
+{ "ok": true, "data": { "main_data": [ { "cnt": { "value": 5 } } ] } }
+```
+
+**对照结论**：同一身份、同形 DSL —— 自己的表 `ok:true`，谢上子的表 91403。
+→ 能力、scope、DSL 写法**全都没问题**，91403 纯粹是那张表的资源级权限没给。
+自己再怎么调都是白费，只能找 owner 提权。
+
+再验完整 DSL（分组 + count + sum + 排序）：
+
+```json
+{"main_data":[
+  {"module":{"value":"安装"}, "cnt":{"value":2}, "mins":{"value":"65.00"}},
+  {"module":{"value":"其他"}, "cnt":{"value":2}, "mins":{"value":"15.00"}},
+  {"module":{"value":"画布"}, "cnt":{"value":1}, "mins":{"value":"30.00"}}]}
+```
+
+> 返回形状：结果在 `.data.main_data[]`，每个值包一层 `{"value": …}`，
+> 且**聚合数值是字符串** —— `sum` 出来是 `"65.00"` 不是 `65`，要再算得先转数字。
+
+---
+
+## 附：状态台账
 
 | 项 | 状态 |
 |---|---|
-| `drive files list` 缺 `space:document:retrieve` | 未补。后果：不能按名字找表，只能拿现成链接进 |
-| `drive +search` 缺 `search:docs:read` | 未补。同上。补需要人工走设备码授权 |
-| `+data-query` 91403 | 未解。要么找表 owner 提权，要么固定走 record-list 降级路径 |
-| `default-as: auto` / `strict-mode: off` | 未改。建议显式写死身份，别让 CLI 猜 |
-| 自建应用做定时机器人（每日抓竞品发群） | 未做。同事原话是「可以了解一下」，属加分项 |
-| SoloCo 飞书群 | 尚未加入，`im +chat-list` 为空 |
+| `search:docs:read` / `space:document:retrieve` | ✅ 已补，140 项，`missing: []`，`drive +search` 实测可用 |
+| `default-as` | ✅ `auto` → `user`。`strict-mode` 有意保持 `off`（见第 7 节） |
+| `+data-query` 91403 | ⚠️ **已定位，未解决** —— 确认是那张表的资源级权限，需 owner（谢上子）提权 |
+| 应用 scope（`--as bot` 读 Base） | ❌ 未申请。要做群机器人必须先去开发者后台申请 |
+| 自建应用做定时机器人（每日抓竞品发群） | ❌ 未做。同事原话是「可以了解一下」，属加分项 |
+| SoloCo 飞书群 | ❌ 尚未加入，`im +chat-list` 为空 |
+| 对照测试用的 Base | 🧹 `YIzKbO39zaHLpKs0OSmcysO1n1g`（名字带「可删」），留着复现用，不需要了可删 |

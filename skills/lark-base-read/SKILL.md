@@ -1,7 +1,7 @@
 ---
 name: lark-base-read
-version: 1.0.0
-description: "在 WSL + lark-cli 环境下读取飞书多维表格（Base）的最短可靠命令序列，以及本地环境特有的坑：身份显式化、record-list 的列式 JSON、内置 jq 的限制、data-query 与 record-list 的权限差。官方 lark-base skill 讲『怎么用 Base API』，本 skill 只讲『在我们这套环境里怎么一次跑对』。字段/公式/写入/仪表盘一律转 lark-base。"
+version: 1.1.0
+description: "在 WSL + lark-cli 环境下读取飞书多维表格（Base）的最短可靠命令序列，以及本地环境特有的坑：record-list 的列式 JSON、内置 jq 的限制、data-query 的资源级权限、补 scope 是覆盖而非追加、用户 scope 与应用 scope 是两套。官方 lark-base skill 讲『怎么用 Base API』，本 skill 只讲『在我们这套环境里怎么一次跑对』。字段/公式/写入/仪表盘一律转 lark-base。"
 metadata:
   requires:
     bins: ["lark-cli"]
@@ -30,7 +30,7 @@ metadata:
 
   不加这两个变量，MSYS 会把参数里的 `/` 路径改写掉。
 - 系统里**没有独立的 jq**。所有 `--jq` 走 lark-cli 内置的精简实现，见下面「内置 jq 的两个限制」。
-- `config default-as` 目前是 `auto`、`strict-mode` 是 `off`。**每条命令显式写 `--as user`**，不要依赖自动推断。
+- `config default-as` 已设为 `user`（`strict-mode` 保持 `off`）。不写 `--as` 就走个人身份；需要机器人时显式 `--as bot`。本文档的示例仍保留 `--as user`，写出来不吃亏。
 
 ## 读取流程（六步，已实测跑通）
 
@@ -107,7 +107,23 @@ lark-cli base +record-list ... --format json --jq "$(cat ~/lark-base-run/rows.jq
 
 ## 第 6 步：data-query 与 record-list 的权限差
 
-**实测：同一个 Base、同一个身份，`+record-list` 能读，`+data-query` 直接 `91403 you don't have permission`。** 换最简 DSL（去掉 dimensions、只留一个 count）仍然 91403，所以是权限不是 DSL 写法。
+**实测：同一个 Base、同一个身份，`+record-list` 能读，`+data-query` 直接 `91403 you don't have permission`。**
+
+**定位方法（重要）—— 建一张自己的表当对照组。** 光在出问题的表上反复试，分不清是"命令不会用"还是"这张表没给权限"。三步就能切干净：
+
+```bash
+# 1. 建一张自己拥有的表
+lark-cli base +base-create --name "对照测试（可删）" --table-name "样例" \
+  --fields '[{"type":"text","name":"标题"},{"type":"select","name":"模块","multiple":false,"options":[{"name":"A"},{"name":"B"}]},{"type":"number","name":"耗时"}]'
+
+# 2. 灌几条数据
+lark-cli base +record-batch-create --base-token <新base> --table-id <新table> \
+  --json '{"create_records":[{"标题":"x","模块":"A","耗时":30}]}'
+
+# 3. 拿同形的 DSL 打自己的表
+```
+
+实测结论：**同形 DSL 在自己的表上 `ok:true`，在别人的表上 91403** → 能力、scope、DSL 写法全没问题，纯粹是那张表的资源级权限。这时候只能找表 owner 提权，自己再怎么调都是白费。
 
 处理方式：
 
@@ -115,24 +131,61 @@ lark-cli base +record-list ... --format json --jq "$(cat ~/lark-base-run/rows.jq
 - 降级到 `+record-list --limit 200` 全量读 + 本地统计，**但只有 `has_more=false` 时这个结论才成立**。`has_more=true` 还本地统计，就是拿一页数据冒充全量。
 - 报结论时把范围写出来：读了几条、`has_more` 是什么。
 
+**返回形状**（实测）：结果在 `.data.main_data[]`，每个值都包了一层 `{"value": …}`，且**聚合数值是字符串**：
+
+```json
+{"data":{"main_data":[
+  {"module":{"value":"安装"}, "cnt":{"value":2}, "mins":{"value":"65.00"}}
+]}}
+```
+
+`sum` 出来是 `"65.00"` 不是 `65`。要再算就得先转数字。
+
 另：`--dsl` **不支持 `@file`**（`--filter-json` 支持）。DSL 必须内联，用 `--dsl "$(cat q.json)"`。
 
-## scope 缺失
+## 补 scope：**重新授权是覆盖，不是追加**
 
-已知缺两个，都不影响「有链接就能读」：
-
-| 命令 | 缺的 scope |
-|---|---|
-| `drive files list` | `space:document:retrieve` |
-| `drive +search` | `search:docs:read` |
-
-后果：**没法按名字搜表，只能拿现成链接进**。要补需要重新走一次设备码授权（会阻塞并吐一个验证 URL，要人去浏览器点）：
+这是最容易把环境搞崩的一步。设备流拿到的新 token **只包含本次请求的 scope**，不会跟已有的合并。
 
 ```bash
+# ❌ 这么写会把现有 138 项冲成 2 项，除了搜索什么都干不了了
 lark-cli auth login --scope "search:docs:read space:document:retrieve"
 ```
 
-`base:app:read` / `base:table:read` / `base:record:read` 都已授权，读取本身不缺权限。
+正确做法：**先把现有 scope 抓出来，做并集再请求**。
+
+```bash
+# 1. 备份
+cp ~/.lark-cli/config.json ~/config.json.bak
+
+# 2. 抓现有 scope（注意 auth status 不支持 --jq，得自己解 JSON）
+lark-cli auth status | python3 -c "
+import json,sys; print(json.load(sys.stdin)['identities']['user']['scope'])" > cur.txt
+
+# 3. 并集
+python3 -c "
+cur=open('cur.txt').read().split()
+new=['search:docs:read','space:document:retrieve']
+open('req.txt','w').write(' '.join(sorted(set(cur)|set(new))))"
+
+# 4. 发起（--no-wait 拿 URL，别阻塞）
+lark-cli auth login --no-wait --json --scope "$(cat req.txt)"
+# → 把 verification_url 给人去浏览器点，10 分钟内有效
+
+# 5. 人点完后收尾
+lark-cli auth login --device-code "<上一步返回的 device_code>"
+```
+
+第 5 步返回里看 `newly_granted` 和 `missing`：`missing: []` 才算干净。
+
+二维码：`lark-cli auth qrcode <url> --output x.png`。URL 是**位置参数不是 `--url`**，且 `--output` 只接受当前目录下的相对路径。
+
+## 两套 scope 不要混
+
+- **用户 OAuth scope** —— `auth login` 授权的那批，管 `--as user`。
+- **应用 scope** —— 要去开发者后台申请，管 `--as bot`。
+
+实测 `--as bot` 读 Base 报 `99991672 app_scope_not_applied: has not applied for the required scope(s): base:app:read`，即使用户身份早就有 `base:app:read`。两者互不相干，`auth login` 补不了应用 scope。要做群机器人得先去后台申请。
 
 ## 常见错误速查
 
@@ -143,11 +196,16 @@ lark-cli auth login --scope "search:docs:read space:document:retrieve"
 | `unexpected token "标"` | 中文 key 要写成 `."标题"` |
 | `--dsl invalid JSON: invalid character '@'` | `--dsl` 不吃 `@file`，改 `"$(cat file)"` |
 | 字段 jq 全是 `null` | 字段对象的 key 是 `id`/`name`，不是 `field_id`/`field_name` |
-| `91403` | 资源级无权限。不换身份重试，按上面降级 |
-| `missing_scope` | 看 error.hint 里给的 `auth login --scope`，需要人工浏览器授权 |
+| `91403` | 资源级无权限。先用「自建对照表」证明不是自己写错，再找 owner 提权 |
+| `99991672 app_scope_not_applied` | 这是**应用 scope**不是用户 scope，`auth login` 补不了，要去开发者后台申请 |
+| `missing_scope` | 看 error.hint，但**别照 hint 直接跑**——它只列缺的那几个，照抄会把现有授权冲掉，按上节做并集 |
 | `param baseToken is invalid` | 没走 `+url-resolve`，把 URL 或 wiki token 当 base_token 了 |
+| `+record-batch-create` 字段报错 | `--json` 是 `{"create_records":[{字段:值}]}` 扁平映射，不是 `{"fields":{…}}` |
+| `auth status --jq` 报 invalid_argument | `auth` 系列不支持 `--jq`，用 python 解 JSON |
 
 ## 安全约定
 
 - **不要把 app secret / token 贴给 Agent。** 走 `lark-cli` 登录，secret 存在 keychain（`config.json` 里应该只看到 `{"source":"keychain"}`），Agent 只调 CLI。
-- 机器人和个人是**两个身份**：操作个人文档、日历、个人可见的表，用 `--as user`；需要应用身份的场景才 `--as bot`。当前 `default-as=auto`，建议显式写死，别让它猜。
+- 机器人和个人是**两个身份**：操作个人文档、日历、个人可见的表用 `--as user`；需要应用身份的场景才 `--as bot`。
+- 已把 `config default-as` 设为 `user`（原为 `auto`），不再让 CLI 猜身份；需要机器人时显式 `--as bot` 覆盖。
+- `config strict-mode` 保持 `off`。注意它**不是**消歧保护，而是二选一锁死（设 `user` 会把机器人命令整个隐藏），会挡住以后做群机器人。CLI 自己也标了「这是安全策略，不得自作主张切换」。
