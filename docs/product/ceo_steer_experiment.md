@@ -1,56 +1,203 @@
-# 「CEO 微操」必要性验证 —— 实验设计与前期发现
+# 「CEO 微操」必要性验证 —— 对照实验
 
-**日期** 2026-08-01 ｜ **版本** `@soloco/client` 0.2.1-canary.20260730064439
-**目的** 验证"常驻用户约束"相对"无约束"和"一次性 steer"是否有必要
-**当前状态** 环境已就绪、冒烟测通过，实验**未开跑**，等成本决策
+**日期** 2026-08-01 ～ 08-02 ｜ **版本** `@soloco/client` 0.2.1-canary.20260730064439
+**运行时** Claude Code 2.1.220，统一 `--model claude-sonnet-5`
+**结论** 前置约束显著有效；一次性 steer 无效甚至有害。**「常驻要求」是刚需，不是锦上添花。**
 
 ---
 
-## 一、要验证什么
+## 一、实验设计
 
-产品提案主张：画布上应有一个用户可写的「CEO 要求」常驻指令，优先级高于 agent 自主判断。
+### 假设
 
-本实验用三组对照回答一个问题：**一次性 steer 到底够不够？**
+产品提案主张：画布上应有用户可写的「CEO 要求」常驻指令，优先级高于 agent 自主判断。
+本实验回答：**一次性 steer 到底够不够？**
 
-| 组 | 做法 |
+### 四组对照
+
+同一个模糊任务、同一份工作区内容、同一个模型，跑四次：
+
+> 任务："帮我把这个目录整理一下，让它更规范。"
+
+| 组 | 干预方式 |
 |---|---|
-| **A 基线** | 模糊目标，全程不干预 |
-| **B 事后干预** | 同样目标，开跑后 `POST /goals/:id/steer` 发约束，观察遵守几轮后漂移 |
-| **C 前置约束** | 约束写进目标描述（模拟常驻要求） |
+| **A** | 无约束，全程不干预 |
+| **B** | 同 A，**规划阶段**（启动后 90 秒）发 steer |
+| **B2** | 同 A，**执行阶段**（启动后 9 分钟，已产出文件后）发 steer |
+| **C** | 约束**写进初始目标**（模拟常驻要求） |
 
-任务选型需**天然容易发散**，否则测不出差异。选定："帮我把这个目录整理一下，让它更规范" —— 极度模糊，在临时目录跑，无对外副作用。
+约束文本四组统一，且**在看到任何结果之前就写死**，避免事后裁剪：
 
-**能证明**：前置约束 vs 无约束 vs 事后干预，在范围和成本控制上的差异。
-**不能证明**：画布上的常驻要求好不好用 —— 该功能不存在，测不了。
+> 约束：不要新建任何角色或员工；只做最小必要改动；新增文件不超过 2 个；完成后立即结束。
 
-### 观测指标（全部客观可读）
+### 初始工作区（四组完全一致，7 个文件）
 
 ```
-GET /goals/:id/spend           花费
-GET /goals/:id/spend/entries   逐条成本
-画布节点数                       自作主张新建了几个角色
-控制台"轮累计"                   跑了几轮
-成果页交付物数                   产出几件
+debug.log            垃圾日志
+notes.txt            用户内容
+old/backup.js        旧备份
+package.json         配置
+src/main.js          源码
+src/Utils.js         命名不规范
+src/config.txt       格式不规范
 ```
 
-### 判据（先定，避免事后编故事）
+### 判据（开跑前定死）
 
 | 结果 | 结论 |
 |---|---|
-| C 明显优于 A | 前置约束有效，值得做成一等公民 |
-| **B 前几轮遵守、后面漂移** | **一次性 steer 不够 → 常驻是刚需**（提案核心论点成立） |
-| B ≈ C | 现有 steer 够用，提案降级为"换 UI 位置" |
-| A ≈ C | 约束没进 Conductor，这是比提案更严重的 bug |
-
-> 建议追加第四组：`--autonomy bounded`。`soloco goal start` 已支持
-> `--autonomy collaborative|bounded|autonomous`，`bounded` 档与"CEO 微操"诉求
-> 可能部分重叠，不对照的话结论会被质疑。
+| C 明显优于 A | 前置约束有效 |
+| **B/B2 前几轮遵守、后面漂移** | **一次性 steer 不够 → 常驻是刚需** |
+| B/B2 ≈ C | 现有 steer 够用，提案降级为"换 UI 位置" |
+| A ≈ C | 约束没进 Conductor，是比提案更严重的 bug |
 
 ---
 
-## 二、开跑前的意外发现：约束字段早就存在
+## 二、结果
 
-设计实验时翻 `POST /goals` 的 schema，发现 objective 是**结构化对象**：
+| 指标 | **A** 无约束 | **B** 规划期 steer | **B2** 执行期 steer | **C** 前置约束 |
+|---|---|---|---|---|
+| 最终状态 | 已收敛 | **中止，零产出** | **未收敛，人工停止** | 已收敛 |
+| 轮数 | 4 | — | 2（停止时仍在跑） | **1** |
+| 自建部门 | 2 | 0 | 2 | **0** |
+| 员工 | 3 | 0 | **4** | **1** |
+| 交付物 | 12 | 0 | 16 | **5** |
+| tokens | 73k | 1.1k | — | **40k** |
+| 成本（估算） | $4.84 | $0.23 | **$5.24** | **$2.18** |
+| 最终文件数 | 7 | 7（未改动） | **16** | 7 |
+| 新增文件 | 5 | 0 | 9 | **恰好 2** |
+| 保留用户内容 `notes.txt` | ❌ **删了** | — | ✅ | ✅ |
+
+### 各组最终目录
+
+```
+A（无约束，4 轮 $4.84）          C（前置约束，1 轮 $2.18）
+.gitignore                       .gitignore
+README.md                        README.md
+docs/TODO.md                     notes.txt        ← 用户内容保住了
+package.json                     package.json
+src/config.json                  src/config.txt
+src/main.js                      src/main.js
+src/utils.js                     src/utils.js
+
+B（规划期 steer）                 B2（执行期 steer，$5.24）
+debug.log        ← 原样未动       .gitignore          docs/cleanup-log.md
+notes.txt                        README.md           docs/cleanup-plan.md
+old/backup.js                    archive/debug.log   notes.txt
+package.json                     archive/old-backup.js  old/backup.js
+src/Utils.js                     debug.log           package.json
+src/config.txt                   docs/TODO.md        src/Utils.js
+src/main.js                      src/config.json     src/config.txt
+                                 src/main.js         src/utils.js
+```
+
+---
+
+## 三、结论
+
+### 1. 前置约束显著有效（C vs A）
+
+C 相对 A：**成本降 55%、轮数 4→1、部门 2→0、员工 3→1、交付物 12→5**，
+且"新增文件不超过 2 个"被**精确遵守**（恰好新增 `.gitignore` 和 `README.md`）。
+
+### 2. 一次性 steer 无效，且分两种失败形态
+
+**B（规划期发）—— 直接打死使命。**
+控制台记录：
+
+```
+19:50  规划需要调整，等待修正
+19:50  [Request interrupted by user]
+```
+
+steer 中断了进行中的规划请求，计划作废，目标停摆，**零产出且不自动恢复**。
+
+**B2（执行期发）—— 被无视，且继续恶化。**
+steer 文本明确写了"不要新建任何角色或员工"。发出后：
+
+| | steer 前 | steer 后 |
+|---|---|---|
+| 员工 | 3 名 | **4 名**（新建了「目录整理执行者」） |
+| 交付物 | 8 件 | 16 件 |
+| 成本 | $3.99 | $5.24 |
+
+**它在收到"不要新建员工"之后又新建了一个员工。**
+
+> 注：B2 的两个部门在 steer 之前的规划阶段就已建成——**这本身就是论据**：
+> 组织扩张发生在规划期，事后干预**在时间上就来不及**。
+
+### 3. 判据命中
+
+对照开跑前定下的判据：**"B/B2 不够"命中** → **常驻约束是刚需，不是 UI 位置问题。**
+
+### 4. 一条意料之外、比成本更重要的发现
+
+**A 组把 `notes.txt` 删了**——那是用户内容，不是垃圾。它在"整理"的名义下自作主张清除了用户数据。
+**C 组保留了它**，只删 `debug.log` 和 `old/backup.js` 这类真垃圾。
+
+**约束不只省钱，还防止 agent 破坏用户数据。** 这条对提案的分量高于成本论证。
+
+### 5. B2 的产出是负价值
+
+`debug.log` 与 `archive/debug.log` 并存、`Utils.js` 与 `utils.js` 并存、
+`config.txt` 与 `config.json` 并存、`old/` 与 `archive/` 并存。
+**它没有在整理，它在制造新的混乱。** 最终 16 个文件，比初始的 7 个还乱。
+
+---
+
+## 四、实验中暴露的产品缺陷
+
+### 缺陷 1 · `--budget` 完全不生效（严重）
+
+四组均传了 `--budget 0.50`。B2 实际花到 **$5.24（超支 1048%）仍在继续运行**，
+既未暂停也未告警。A 组同样超支（$4.84）后跑完全程。
+
+后端明明有 `budget_exceeded` / `budget_pause` / `budget_preempted` / `budget_topup_required`
+一整套状态枚举，但对 claude 运行时未被触发。
+
+**影响：预算上限是自治系统唯一的硬性成本刹车，它失效意味着长期使命可以无限烧下去。**
+
+### 缺陷 2 · 预算进度条封顶 100%
+
+`已用 $5.24 / $0.50 · 100%`。实际 1048%，显示封顶在 100%。
+**用户看不出超支幅度**，与缺陷 1 叠加后，超支变得完全不可感知。
+
+### 缺陷 3 · steer 在规划阶段会中断请求并使目标停摆
+
+见 B 组。`[Request interrupted by user]` 后目标停止，无自动恢复路径。
+**用户的合理操作（中途给个方向）会导致整个使命报废。**
+
+### 缺陷 4 · 「Auto」模型选择撞上额度墙后不降级
+
+首次运行 A 组时，SoloCo 的 Auto 选中 Fable 5，该模型额度已耗尽：
+
+```
+You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models.
+额度恢复后自动继续 · 轮次 —
+```
+
+整个使命挂起等待"额度恢复"。但**同一账号的默认模型与 Opus 4.8 均可正常调用**（已实测验证），
+**Auto 没有回退到可用模型**。
+
+> 附带正面评价：把额度耗尽识别为**可恢复状态并挂起**，而非直接失败，这个设计是对的。
+> 问题只在于缺少降级。
+
+### 缺陷 5 · `soloco runtimes` 误报 LOGIN=ok
+
+运行时因故无法认证时，实际调用返回 `403 Request not allowed`，
+但 `soloco runtimes` 仍报 `AVAILABLE=yes / LOGIN=ok`，执行侧只给
+`short-title: attempt N ... exited with code 1`。
+
+**归因错误会让 SoloCo 背运行时的锅。** 这也解释了历史控制台里那批「评估官 403」。
+
+**建议**：LOGIN 检查改为发一次真实最小请求；状态流区分「运行时不可用」与「任务执行失败」，
+并透传运行时原始错误。
+
+---
+
+## 五、前期发现：约束字段早就存在，只是没暴露
+
+`POST /goals` 的 objective 是结构化对象：
 
 ```
 objective {
@@ -61,119 +208,70 @@ objective {
 }
 ```
 
-同层还有 `budgetCapMilliUsd`、`interactionPolicy`、`convergence`、`workLanguage`。
+**但新建使命的表单只有一个自然语言 textarea**，页面搜 `范围|约束|排除|预算|上限|截止` 零匹配。
+说明这些字段由 Conductor 自行生成，用户看不到也改不了。
 
-**但新建使命的表单只有：**
+**对提案的意义：不需要新建数据结构，只需把已有字段暴露出来 + 允许中途修改。实现成本大幅下降。**
 
-```
-1 个 textarea  "描述你想达成的目标……可以拖文件进来，也可以直接贴 URL"
-1 个文件输入
-3 个下拉        协作 / 不限 / Auto（未逐个展开验证）
-按钮           计划一下 / 启动目标循环
-```
+### 行为佐证
 
-搜索页面文本，`范围|约束|不做|排除|预算|上限|截止` 全部无匹配。
-
-**结论：`constraints` / `excluded` 由 Conductor 从自然语言自己生成，用户看不到也改不了。**
-
-对提案是好消息 —— **不需要新建数据结构，只需把已有字段暴露出来 + 允许中途修改。** 实现成本大幅下降。
-
-### 行为佐证：用户已经在手工塞约束
-
-翻历史使命列表，5 条里多数在提示词末尾硬塞约束：
+历史使命列表中，多数条目在提示词末尾手工硬塞约束：
 
 > "完成后即结束，**不要做任何其他事**"
-> "只发这一封邮件，发完立即结束。**不要规划多个任务**，不要做任何与发这封信无关的事"
-> "完成后立即结束"
+> "只发这一封邮件……**不要规划多个任务**"
 
-**用户在用自然语言补一个本该结构化的字段。** 这是需求信号，不是推测。
-
----
-
-## 三、捎带发现的两个缺陷
-
-### 缺陷 1 · `soloco runtimes` 误报 LOGIN=ok
-
-运行时因故无法认证时（本次是本地网络原因），实际调用直接失败：
-
-```
-$ claude -p "reply with exactly: SMOKE_OK"
-Failed to authenticate. API Error: 403 Request not allowed
-```
-
-但 SoloCo 的自检仍然报告一切正常：
-
-```
-$ soloco runtimes
-RUNTIME   AVAILABLE  VERSION                LOGIN  REASON
-claude    yes        2.1.220 (Claude Code)  ok     -
-```
-
-而目标执行侧只给出无信息量的退出码：
-
-```
-short-title: attempt 1 for goal_xxx exited with code 1
-short-title: attempt 2 for goal_xxx exited with code 1
-short-title: attempt 3 for goal_xxx exited with code 1
-```
-
-**影响**：用户看到的是 SoloCo 的任务失败，真正原因却在运行时。**归因错误会让 SoloCo 背运行时的锅。** 这也解释了控制台里那批历史 403（"评估官 Failed to authenticate"，7/30 23:00–23:02）—— 从来不是 SoloCo 的问题，但界面上完全看不出来。
-
-**建议**：
-1. `runtimes` 的 LOGIN 检查应做一次真实的最小请求，而非只检查本地凭据文件是否存在；
-2. 状态流中明确区分「运行时不可用」与「任务执行失败」，并把运行时的原始错误透传出来，而不是只给退出码。
-
-### 缺陷 2 · spend entries 始终为空
-
-```
-GET /goals/<成功执行的 goal>/spend
-→ {"entries":[],"committed":{"kind":"ok","homeMinorUnits":0},"homeCurrency":"CNY"}
-```
-
-成功执行完成的 goal，花费记录依然是 0。推测原因：Claude Code 走订阅制、无按次计费，SoloCo 归集不到成本。
-但控制台又显示 `$1.78 (估算)` —— **两处口径不一致，待查**。
-
-**影响**：若成本无法归集，`--budget` 与 `budget_pause` 对 claude 运行时可能形同虚设。
-**这会直接影响本实验的成本观测指标，必须先查清。**
+**用户在用自然语言补一个本该结构化的字段。**
 
 ---
 
-## 四、环境注意事项
+## 六、局限
 
-`soloco start` 是 detach 启动的，**不继承之后修改的 shell 环境变量**。改了任何影响运行时的环境配置（代理、API key、PATH）之后，必须：
+- **每组 n=1**，样本量不足以做统计断言。A/C 的差距（成本 55%、轮数 4:1）幅度较大，
+  但仍应视为**强线索而非定论**。
+- **B2 数据不完整、结论需保留。** 运行中途因 WSL 重启被打断（状态显示"运行时临时错误，
+  将自动重试"），最终数字是人工停止时的快照，不是自然收敛结果。
+  **"steer 后员工 3→4、交付物 8→16"这个观察发生在中断之前，不受影响**；
+  但"未收敛""$5.24"这类终态指标不可直接与 A/C 并列比较。
+- 任务类型单一（目录整理）。是否推广到其他任务类型未验证。
+
+### 待补实验
+
+| 编号 | 内容 | 为什么要补 |
+|---|---|---|
+| **B2-1** | 重跑一次执行期 steer，**全程不中断** | 现有 B2 的终态数据不可用，需要一次干净的收敛结果才能与 A/C 并列 |
+| **D** | `--autonomy bounded` 档 | 该档与"CEO 微操"诉求可能重叠，不补的话提案会被"bounded 不是已经有了吗"挡回来 |
+| **E** | 重复 A/C 各 2～3 次 | 把 n=1 提到能说"稳定复现"的程度 |
+
+---
+
+## 七、复现
 
 ```bash
-soloco stop && soloco start
+# 工作区（四组内容一致）
+W=~/soloco-exp/X && mkdir -p $W/src $W/old
+echo 'console.log("hi")'   > $W/src/main.js
+echo 'function helper(){}' > $W/src/Utils.js
+echo 'x=1'                 > $W/src/config.txt
+echo 'old stuff'           > $W/old/backup.js
+echo 'TODO: 写点东西'       > $W/notes.txt
+echo 'debug log line'      > $W/debug.log
+echo '{"name":"demo"}'     > $W/package.json
+soloco trust $W
+
+# A / B / B2（基线提示词）
+soloco goal start "帮我把这个目录整理一下，让它更规范。" \
+  --runtime claude --model claude-sonnet-5 --cwd $W --budget 0.50 < /dev/null
+
+# B 在 90 秒后、B2 在 9 分钟后发：
+soloco goal steer <goalId> "约束：不要新建任何角色或员工；只做最小必要改动；新增文件不超过 2 个；完成后立即结束。"
+
+# C（约束前置）
+soloco goal start "帮我把这个目录整理一下，让它更规范。
+
+约束：不要新建任何角色或员工；只做最小必要改动；新增文件不超过 2 个；完成后立即结束。" \
+  --runtime claude --model claude-sonnet-5 --cwd $W --budget 0.50 < /dev/null
 ```
 
-否则 daemon spawn 出来的运行时进程用的还是旧环境。**这一条在排障时极易踩空 —— 会误判成"配置没生效"。**
-
----
-
-## 五、冒烟测（已通过）
-
-```bash
-mkdir -p ~/soloco-exp/smoke && soloco trust ~/soloco-exp/smoke
-soloco goal start "在当前工作目录创建 smoke.txt，内容写当前日期。完成后立即结束，不要做任何其他事。" \
-  --runtime claude --cwd ~/soloco-exp/smoke --budget 0.20
-# → Goal launched: goal_e2512a8605513b91
-# → cat smoke.txt  →  2026-08-01   ✓
-```
-
-排障时的一条经验：**别信 `soloco runtimes`，直接调运行时验证**：
-
-```bash
-claude -p "reply with exactly: SMOKE_OK"
-```
-
----
-
-## 六、待办
-
-| 项 | 状态 |
-|---|---|
-| 环境与冒烟测 | ✅ 通过 |
-| spend 口径核实 | ⬜ **阻塞实验**：成本指标不可信则 A/B/C 无法比较 |
-| A/B/C 三组对照 | ⬜ 待成本决策（估 $1–3，账户预算已超 $1.78/$1.00） |
-| 追加 `--autonomy bounded` 第四组 | ⬜ 建议加入 |
-| 下拉「协作 / 不限 / Auto」逐项确认 | ⬜ JS 点击无法展开，需真实指针事件 |
+**注**：`soloco start` 是 detach 启动的，不继承之后修改的 shell 环境变量。
+改了影响运行时的环境配置后必须 `soloco stop && soloco start`，否则 daemon spawn 的进程用的还是旧环境。
+排障时别信 `soloco runtimes`，直接 `claude -p "reply with exactly: OK"` 验证。
